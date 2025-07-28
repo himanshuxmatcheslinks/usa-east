@@ -1,0 +1,366 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Astro UHD | Premium Streaming</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/shaka-player/4.6.0/shaka-player.ui.min.js"></script>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/shaka-player/4.6.0/controls.min.css">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --primary: #00a8ff;
+    --primary-dark: #0078cc;
+    --bg-dark: #0a0a12;
+    --bg-darker: #050508;
+    --text-light: #f0f0f0;
+    --text-muted: #aaaaaa;
+    --control-bg: rgba(20, 20, 30, 0.9);
+    --control-bg-hover: rgba(40, 40, 60, 0.9);
+    --seekbar-buffered: rgba(100, 100, 120, 0.6);
+    --seekbar-played: var(--primary);
+    --volume-level: var(--primary);
+    --error-red: #ff4d4d;
+  }
+
+  * {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+  }
+
+  html, body {
+    background: var(--bg-darker);
+    height: 100vh;
+    width: 100vw;
+    overflow: hidden;
+    font-family: 'Inter', system-ui, -apple-system, sans-serif;
+    color: var(--text-light);
+  }
+
+  .shaka-video-container {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+  }
+
+  video {
+    width: 100%;
+    height: 100%;
+    background: #000;
+    object-fit: contain;
+  }
+
+  /* Custom spinner */
+  .loading-spinner {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    z-index: 10;
+    display: none;
+  }
+
+  .spinner {
+    width: 50px;
+    height: 50px;
+    border: 4px solid rgba(255, 255, 255, 0.1);
+    border-radius: 50%;
+    border-top-color: var(--primary);
+    animation: spin 1s ease-in-out infinite;
+  }
+
+  @keyframes spin {
+    to { transform: rotate(360deg); }
+  }
+
+  /* Custom UI overrides */
+  .shaka-overflow-menu, 
+  .shaka-settings-menu {
+    background-color: var(--control-bg) !important;
+    border-radius: 8px !important;
+    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3) !important;
+  }
+
+  .shaka-controls-button:hover {
+    background-color: var(--control-bg-hover) !important;
+  }
+
+  .shaka-seek-bar-container {
+    height: 4px !important;
+  }
+
+  .shaka-volume-bar-container {
+    height: 4px !important;
+  }
+
+  /* Custom branding */
+  .player-brand {
+    position: absolute;
+    top: 20px;
+    left: 20px;
+    z-index: 5;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+
+  .brand-logo {
+    height: 30px;
+    filter: drop-shadow(0 0 8px rgba(0, 168, 255, 0.5));
+  }
+
+  .brand-text {
+    font-size: 18px;
+    font-weight: 600;
+    color: white;
+    text-shadow: 0 0 8px rgba(0, 168, 255, 0.5));
+  }
+
+  /* Quality indicator */
+  .quality-indicator {
+    position: absolute;
+    top: 20px;
+    right: 20px;
+    background: rgba(0, 0, 0, 0.7);
+    padding: 4px 8px;
+    border-radius: 4px;
+    font-size: 12px;
+    font-weight: 500;
+    z-index: 5;
+  }
+
+  /* Error message */
+  .error-message {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    background: rgba(0, 0, 0, 0.8);
+    padding: 20px;
+    border-radius: 8px;
+    text-align: center;
+    max-width: 80%;
+    display: none;
+    z-index: 20;
+  }
+
+  .error-title {
+    color: var(--error-red);
+    font-size: 18px;
+    margin-bottom: 10px;
+  }
+
+  .error-details {
+    color: var(--text-muted);
+    font-size: 14px;
+  }
+
+  /* Hide default spinner */
+  .shaka-spinner-container,
+  .shaka-spinner,
+  .shaka-spinner-svg {
+    display: none !important;
+  }
+</style>
+</head>
+<body oncontextmenu="return false">
+
+<div class="shaka-video-container" data-shaka-player>
+  <video autoplay playsinline preload="auto"></video>
+  
+  <!-- Custom UI elements -->
+  <div class="player-brand">
+    <svg class="brand-logo" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+      <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 18c-4.41 0-8-3.59-8-8s3.59-8 8-8 8 3.59 8 8-3.59 8-8 8zm-5-9h10v2H7z" fill="currentColor"/>
+    </svg>
+    <span class="brand-text">ASTRO UHD</span>
+  </div>
+  
+  <div class="quality-indicator">HD</div>
+  
+  <div class="loading-spinner">
+    <div class="spinner"></div>
+  </div>
+  
+  <div class="error-message">
+    <div class="error-title">Stream Error</div>
+    <div class="error-details">Unable to load the video stream. Please try again later.</div>
+  </div>
+</div>
+
+<script>
+document.addEventListener('DOMContentLoaded', async () => {
+  // Security measures
+  document.addEventListener('contextmenu', e => e.preventDefault());
+  document.addEventListener('keydown', e => {
+    if (e.keyCode == 123 || 
+        (e.ctrlKey && e.shiftKey && (e.keyCode == 73 || e.keyCode == 74 || e.keyCode == 67)) || 
+        (e.ctrlKey && e.keyCode == 85)) {
+      e.preventDefault();
+    }
+  });
+
+  // DevTools detection
+  let devtoolsOpen = false;
+  setInterval(() => {
+    const start = performance.now();
+    debugger;
+    const time = performance.now() - start;
+    if (time > 100) {
+      devtoolsOpen = true;
+      alert('Developer tools are not allowed.');
+      location.reload();
+    }
+  }, 500);
+
+  // Initialize Shaka Player
+  shaka.polyfill.installAll();
+  if (!shaka.Player.isBrowserSupported()) {
+    showError("Browser Not Supported", "Your browser does not support the required video playback technology.");
+    return;
+  }
+
+  const video = document.querySelector('video');
+  const player = new shaka.Player();
+  const loadingSpinner = document.querySelector('.loading-spinner');
+  const qualityIndicator = document.querySelector('.quality-indicator');
+  
+  // Show loading spinner when buffering
+  player.addEventListener('buffering', (e) => {
+    loadingSpinner.style.display = e.buffering ? 'block' : 'none';
+  });
+
+  try {
+    await player.attach(video);
+    const container = document.querySelector('.shaka-video-container');
+    const ui = new shaka.ui.Overlay(player, container, video);
+
+    // Custom UI configuration
+    ui.configure({
+      controlPanelElements: [
+        'play_pause', 'time_and_duration', 'mute', 'volume',
+        'spacer', 'language', 'captions', 'picture_in_picture',
+        'quality', 'fullscreen'
+      ],
+      volumeBarColors: {
+        base: 'rgba(255, 255, 255, 0.2)',
+        level: 'var(--volume-level)'
+      },
+      seekBarColors: {
+        base: 'var(--bg-dark)',
+        buffered: 'var(--seekbar-buffered)',
+        played: 'var(--seekbar-played)'
+      },
+      overflowMenuButtons: ['quality', 'captions', 'language']
+    });
+
+    // DRM configuration
+    const clearKeysAll = {
+      "78ab64fa90f137a697743b5dc27b2f96": "de4d31c7fc6005ede28abab2a0720a9f"
+    };
+
+    player.configure({
+      drm: { clearKeys: clearKeysAll },
+      abr: { enabled: true },
+      streaming: {
+        lowLatencyMode: true,
+        bufferingGoal: 20,
+        rebufferingGoal: 5,
+        bufferBehind: 20
+      }
+    });
+
+    // Network configuration
+    player.getNetworkingEngine().registerRequestFilter((type, request) => {
+      request.headers['Referer'] = 'https://astro.com.my/';
+      request.headers['User-Agent'] = 'Mozilla/5.0 (Linux; Android 13) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/127.0.0.0 Mobile Safari/537.36';
+    });
+
+    // Quality indicator update
+    player.addEventListener('variantchanged', (e) => {
+      const height = e.newVariant.video.height || 0;
+      if (height >= 1080) {
+        qualityIndicator.textContent = 'UHD';
+        qualityIndicator.style.color = 'var(--primary)';
+      } else if (height >= 720) {
+        qualityIndicator.textContent = 'HD';
+        qualityIndicator.style.color = 'var(--primary)';
+      } else {
+        qualityIndicator.textContent = 'SD';
+        qualityIndicator.style.color = 'var(--text-muted)';
+      }
+    });
+
+    // Load stream with retry logic
+    const tryLoadStream = async (auth) => {
+      const url = `https://fsly.stream.peacocktv.com/Content/CMAF_OL1-CTR-4s/Live/channel(usa-east)/master.mpd`;
+      try {
+        await player.load(url);
+        console.log(`✅ Stream loaded successfully (auth=${auth})`);
+        return true;
+      } catch (err) {
+        console.warn(`Stream load failed (auth=${auth}):`, err.message);
+        return false;
+      }
+    };
+
+    let success = await tryLoadStream(2);
+    if (!success) {
+      console.log("🔁 Trying fallback auth=1");
+      success = await tryLoadStream(1);
+    }
+
+    if (!success) {
+      showError("Stream Unavailable", "The video stream could not be loaded. Please check your connection.");
+    }
+
+    // Auto-play handling
+    const attemptAutoplay = async () => {
+      try {
+        video.muted = false;
+        await video.play();
+      } catch {
+        try {
+          video.muted = true;
+          await video.play();
+        } catch (err) {
+          console.warn("Autoplay failed:", err.message);
+        }
+      }
+    };
+
+    video.addEventListener('canplay', attemptAutoplay, { once: true });
+    setTimeout(() => { if (video.paused) attemptAutoplay(); }, 2000);
+
+    video.addEventListener('loadedmetadata', () => {
+      video.volume = 0.8;
+    });
+
+    // Unmute on interaction
+    ['click', 'touchstart', 'keydown'].forEach(evt =>
+      document.addEventListener(evt, () => { 
+        if (video.muted) video.muted = false; 
+      }, { once: true })
+    );
+
+  } catch (err) {
+    console.error("Player initialization failed:", err);
+    showError("Initialization Error", "Failed to initialize the video player.");
+  }
+
+  function showError(title, message) {
+    const errorElement = document.querySelector('.error-message');
+    document.querySelector('.error-title').textContent = title;
+    document.querySelector('.error-details').textContent = message;
+    errorElement.style.display = 'block';
+  }
+});
+</script>
+</body>
+</html>
